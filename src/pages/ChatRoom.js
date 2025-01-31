@@ -8,37 +8,63 @@ const ChatRoom = () => {
 
     const [selectedNumber, setSelectedNumber] = useState([]);
     const { roomId } = useParams();
+    const { memberId } = useParams();
 
-    const numbers = [1, 2, 3, 4, 5]; // 회원 번호를 위한 숫자 배열
+    const [numbers, setNumber] = useState([]); 
+
+    const fetchNumbers = async () => {
+        await axios.get(`http://localhost:8080/v1/api/chatroom/` + roomId)
+            .then(response => {setNumber(response.data.data)});
+        
+    };
 
     const handleNumberClick = (number) => {
         setSelectedNumber(number);
     };
 
     const stompClient = useRef(null);
+    const subscription = useRef(null);
+
     // 채팅 내용들을 저장할 변수
     const [messages, setMessages] = new useState([]);
     // 사용자 입력을 저장할 변수
     const [inputValue, setInputValue] = useState('');
+    
     // 입력 필드에 변화가 있을 때마다 inputValue를 업데이트
     const handleInputChange = (event) => {
         setInputValue(event.target.value);
     };
+
     // 웹소켓 연결 설정
     const connect = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         stompClient.current = Stomp.over(socket);
         stompClient.current.connect({}, () => {
-            stompClient.current.subscribe(`/sub/chatroom/` + roomId, (message) => {
+            subscription.current = stompClient.current.subscribe(`/sub/chatroom/` + roomId, (message) => {
                 const newMessage = JSON.parse(message.body);
                 setMessages((prevMessages) => [...prevMessages, newMessage]);
+            }, {
+                roomId: roomId,
+                memberId: memberId
             });
         });
     };
+
     // 웹소켓 연결 해제
     const disconnect = () => {
+
+        if(subscription.current){
+            subscription.current.unsubscribe( Headers = {
+                roomId: roomId,
+                memberId: memberId
+            });
+        }
+
         if (stompClient.current) {
-        stompClient.current.disconnect();
+            stompClient.current.disconnect( Headers = {
+                roomId: roomId,
+                memberId: memberId
+            });
         }
     };
     // 기존 채팅 메시지를 서버로부터 가져오는 함수
@@ -49,6 +75,7 @@ const ChatRoom = () => {
         console.log(messages)
     };
     useEffect(() => {
+        fetchNumbers();
         connect();
         fetchMessages();
         // 컴포넌트 언마운트 시 웹소켓 연결 해제
@@ -60,10 +87,11 @@ const ChatRoom = () => {
         if (stompClient.current && inputValue && selectedNumber) {
             const body = {
                 roomId : roomId,
+                guestId : memberId % 2 + 1,
                 message : inputValue,
-                memberId : selectedNumber    
+                memberId : memberId
             };
-        stompClient.current.send(`/pub/message`, {}, JSON.stringify(body));
+        stompClient.current.send(`/pub/message`, body, JSON.stringify(body));
         setInputValue('');
         }
     };
